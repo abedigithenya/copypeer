@@ -1,0 +1,149 @@
+<?php
+class TaskController extends LegitController
+{
+    private $common;
+    private $bid;
+    private $wallet;
+    private $transactionsController;
+    private $ratings;
+    private $reviews;
+    private $messages;
+    private $order;
+    private $userController;
+    private $user;
+
+    public function __construct($model, $controller, $action)
+    {
+        parent::__construct($model, $controller, $action);
+        $this->common = new Common();
+        $this->bid = new Bid();
+        $this->wallet = new Wallet();
+        $this->ratings = new Ratings();
+        $this->reviews = new Reviews();
+        $this->messages = new Messages();
+        $this->order = new Order();
+        $this->user = new User();
+
+        $this->transactionsController = new TransactionsController('transactions', 'transactions', 'getLoadWalletForm');
+        $this->userController = new UserController('user', 'user', 'getLoginForm');
+    }
+
+    private function checkUserPermissions()
+    {
+        if (!User::isUserLogged()) {
+            Message::addErrorMessage(Utilities::getLabel('E_Log_in_To_Continue'));
+            redirectUser(generateUrl('user', 'signin'));
+        }
+        if (User::isWriter()) {
+            redirectUser(generateUrl('page_not_found'));
+        } /* die( Utilities::getLabel('E_Invalid_request') ); */
+        if (!User::isUserActive()) {
+            Message::addErrorMessage(Utilities::getLabel('E_User_Deactivate_Notification'));
+            redirectUser(generateUrl('user', 'signin'));
+        }
+    }
+
+    private function handleFirstOrder()
+    {
+        $firstOrder = Common::is_first_order_done();
+        if (!$firstOrder) {
+            $data = $this->Task->getCustomerOrders('mine', 1);
+            foreach ($data['orders'] as $value) {
+                Message::addMessage(
+                    Utilities::getLabel('S_Complete_Order_Process_Notify_Message') . ' <a href=' . generateUrl('task', 'add', array($value['task_id'])) . '>' . Utilities::getLabel('L_click_here') . '</a>'
+                );
+            }
+        }
+    }
+
+    private function setOrderData($filter, $orderType)
+    {
+        $this->set('filter', $filter);
+        $this->set('arr_messages', $this->messages->getConversationHistory($data['bid_id']));
+        $this->set('arr_orders', $this->Task->getCustomerOrders($orderType, 1));
+        $this->set('arr_ongoing_orders', $this->Task->getCustomerOrders('ongoing_' . $orderType, 1));
+        $this->set('arr_completed_orders', $this->Task->getCustomerOrders('completed_' . $orderType, 1));
+        $this->set('arr_cancelled_orders', $this->Task->getCustomerOrders('cancelled_' . $orderType, 1));
+        $this->set('arr_invites', $this->Task->getPrivateOrders());
+    }
+
+    /* Function to list customer's orders */
+    public function my_orders($filter = '')
+    {
+        $post = Syspage::getPostedVar();
+        $this->checkUserPermissions();
+        
+        if (!in_array($filter, array('mine', 'ongoing', 'completed', 'cancelled', 'invites'))) {
+            $filter = 'mine';
+        }
+
+        $this->handleFirstOrder();
+        $this->setOrderData($filter, 'mine');
+
+        $this->_template->render();
+    }
+
+    /* Function to list customer's papers */
+    public function my_papers($filter = '')
+    {
+        $post = Syspage::getPostedVar();
+        $this->checkUserPermissions();
+        
+        if (!in_array($filter, array('mine', 'ongoing', 'completed', 'cancelled', 'invites'))) {
+            $filter = 'mine';
+        }
+
+        $this->handleFirstOrder();
+        $this->setOrderData($filter, 'papers');
+        $this->set('arr_task', $this->Task->getTaskDetailsById($task_id));
+        $this->set('arr_blog_url', $this->Task->getBlogUrlById(19773));
+
+        $this->_template->render();
+    }
+}
+/* Function to get private orders */
+public function invites()
+{
+    $post = Syspage::getPostedVar();
+
+    $page = max(1, intval($post['page']));
+
+    $arr_orders = $this->Task->getPrivateOrders($page);
+
+    $arr_orders['str_paging'] = generatePagingStringHtml($arr_orders['page'], $arr_orders['pages'], "invites(xxpagexx);");
+
+    $this->set('arr_orders', $arr_orders);
+
+    $this->_template->render(false, false);
+}
+
+public function bids()
+{
+    $post = Syspage::getPostedVar();
+
+    $page = max(1, intval($post['page']));
+    $filter = in_array($post['filter'], array('mine', 'ongoing', 'completed', 'cancelled', 'invites')) ? $post['filter'] : 'mine';
+
+    $arr_orders = (array) $this->Task->getCustomerOrders($filter, $page);
+
+    foreach ($arr_orders['orders'] as $key => $arr) {
+        $action = 1;
+        if (!User::isWriter()) {
+            $first_order = Common::is_first_order_done();
+            if ($first_order === false) {
+                //$action = '<td><a href="'.generateUrl("task","add",array($arr["task_id"])).'">#'. $arr['task_ref_id'].'</td>';
+            } else {
+                if (User::isUserActive()) {
+                    //$action = '<td class="dataTable"><a href="'.generateUrl('task', 'order_bids', array($arr['task_id'])).'" class="theme-btn">View Order</a></td>';
+                }
+            }
+        }
+        $arr_orders['orders'][$key]['action'] = $action;
+    }
+
+    $arr_orders['str_paging'] = generatePagingStringHtml($arr_orders['page'], $arr_orders['pages'], "bids('" . $filter . "',xxpagexx);");
+
+    $this->set('arr_orders', $arr_orders);
+
+    $this->_template->render(false, false);
+}
