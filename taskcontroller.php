@@ -870,7 +870,9 @@ class TaskController extends LegitController
 
         $order_details = $this->Task->getOrderDetails($row['file_task_id']);
 
-
+        if ($order_details !== false && $order_details['bid_user_id'] != User::getLoggedUserAttribute('user_id') && $order_details['task_user_id'] != User::getLoggedUserAttribute('user_id')) {
+            die(Utilities::getLabel('E_Invalid_request'));
+        }
 
         //$task_details = $this->Task->getTaskDetailsById($row['file_task_id']);
 
